@@ -1,18 +1,23 @@
 // Service Worker - Handles background tasks and message passing
 
 import { getAccessToken, isAuthenticated } from '../utils/auth.js';
-import { getSites, getPagePerformanceComparison } from '../utils/api.js';
+import {
+  queryAllSearchAnalytics,
+  getPagePerformanceComparison,
+  getPageQueryData,
+  getSites
+} from '../utils/api.js';
 import { analyzeContentDecay, calculateSiteSummary, exportToCSV } from '../utils/decay-analyzer.js';
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener((details) => {
   console.log('Content Decay Analyzer installed', details.reason);
-  
+
   // Set up periodic analysis alarm (every 24 hours)
   chrome.alarms.create('dailyAnalysis', {
     periodInMinutes: 24 * 60 // 24 hours
   });
-  
+
   // Clear any old cache on update
   if (details.reason === 'update') {
     clearOldCache();
@@ -22,7 +27,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 // Handle alarms for scheduled tasks
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   console.log('Alarm triggered:', alarm.name);
-  
+
   if (alarm.name === 'dailyAnalysis') {
     await runBackgroundAnalysis();
   }
@@ -34,7 +39,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handleMessage(message)
     .then(sendResponse)
     .catch(error => sendResponse({ success: false, error: error.message }));
-  
+
   return true; // Keep message channel open for async response
 });
 
@@ -43,29 +48,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  */
 async function handleMessage(message) {
   console.log('Received message:', message.action);
-  
+
   switch (message.action) {
     case 'GET_SITES':
       return await handleGetSites();
-    
+
     case 'ANALYZE_SITE':
       return await handleAnalyzeSite(message.siteUrl, message.options);
-    
+
     case 'GET_CACHED_ANALYSIS':
       return await getCachedAnalysis(message.siteUrl);
-    
+
     case 'CHECK_AUTH':
-      return { 
-        success: true, 
-        authenticated: await isAuthenticated() 
+      return {
+        success: true,
+        authenticated: await isAuthenticated()
       };
-    
+
     case 'EXPORT_CSV':
       return await handleExportCSV(message.siteUrl);
-    
+
+    case 'GET_PAGE_QUERIES':
+      return await handleGetPageQueries(message.siteUrl, message.pageUrl, message.days);
+
     case 'CLEAR_CACHE':
       return await handleClearCache(message.siteUrl);
-    
+
     default:
       return { success: false, error: 'Unknown action: ' + message.action };
   }
@@ -77,8 +85,8 @@ async function handleMessage(message) {
 async function handleGetSites() {
   try {
     const sites = await getSites();
-    return { 
-      success: true, 
+    return {
+      success: true,
       sites: sites.map(site => ({
         siteUrl: site.siteUrl,
         permissionLevel: site.permissionLevel
@@ -86,6 +94,23 @@ async function handleGetSites() {
     };
   } catch (error) {
     console.error('Failed to get sites:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get top queries for a specific page
+ */
+async function handleGetPageQueries(siteUrl, pageUrl, days) {
+  try {
+    const result = await getPageQueryData(siteUrl, pageUrl, days);
+    return {
+      success: true,
+      queries: result.queries,
+      dateRanges: result.dateRanges
+    };
+  } catch (error) {
+    console.error('Failed to get page queries:', error);
     return { success: false, error: error.message };
   }
 }
@@ -99,9 +124,11 @@ async function handleAnalyzeSite(siteUrl, options = {}) {
       currentDays = 30,
       previousDays = 30,
       minImpressions = 50,
+      minClicks = 0,
+      brandKeywords = '',
       forceRefresh = false
     } = options;
-    
+
     // Check cache first (unless force refresh)
     if (!forceRefresh) {
       const cached = await getCachedAnalysis(siteUrl);
@@ -110,37 +137,41 @@ async function handleAnalyzeSite(siteUrl, options = {}) {
         return cached;
       }
     }
-    
+
     console.log('Running fresh analysis for', siteUrl);
-    
+
     // Get performance comparison data
     const comparison = await getPagePerformanceComparison(siteUrl, {
       currentDays,
       previousDays,
-      minImpressions
+      minImpressions,
+      minClicks,
+      brandKeywords
     });
-    
+
     // Analyze for decay
-    const analyzed = analyzeContentDecay(comparison);
-    const summary = calculateSiteSummary(analyzed);
-    
+    const analysisResult = analyzeContentDecay(comparison, options);
+    const summary = calculateSiteSummary(analysisResult.pages);
+
     // Cache results
     const cacheKey = `analysis_${btoa(siteUrl)}`;
     await chrome.storage.local.set({
       [cacheKey]: {
         timestamp: Date.now(),
         summary,
-        pages: analyzed
+        pages: analysisResult.pages,
+        dateRanges: analysisResult.dateRanges
       }
     });
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       cached: false,
-      summary, 
-      pages: analyzed 
+      summary,
+      pages: analysisResult.pages,
+      dateRanges: analysisResult.dateRanges
     };
-    
+
   } catch (error) {
     console.error('Analysis failed:', error);
     return { success: false, error: error.message };
@@ -153,21 +184,21 @@ async function handleAnalyzeSite(siteUrl, options = {}) {
 async function getCachedAnalysis(siteUrl) {
   const cacheKey = `analysis_${btoa(siteUrl)}`;
   const result = await chrome.storage.local.get(cacheKey);
-  
+
   if (result[cacheKey]) {
     const age = Date.now() - result[cacheKey].timestamp;
     const maxAge = 12 * 60 * 60 * 1000; // 12 hours
-    
+
     if (age < maxAge) {
-      return { 
-        success: true, 
+      return {
+        success: true,
         cached: true,
         cacheAge: Math.round(age / 1000 / 60), // minutes
-        ...result[cacheKey] 
+        ...result[cacheKey]
       };
     }
   }
-  
+
   return { success: false, cached: false };
 }
 
@@ -177,14 +208,14 @@ async function getCachedAnalysis(siteUrl) {
 async function handleExportCSV(siteUrl) {
   try {
     const cached = await getCachedAnalysis(siteUrl);
-    
+
     if (!cached.success || !cached.pages) {
       return { success: false, error: 'No analysis data available. Run analysis first.' };
     }
-    
+
     const csv = exportToCSV(cached.pages);
     return { success: true, csv };
-    
+
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -204,7 +235,7 @@ async function handleClearCache(siteUrl = null) {
       const cacheKeys = Object.keys(storage).filter(k => k.startsWith('analysis_'));
       await chrome.storage.local.remove(cacheKeys);
     }
-    
+
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
@@ -218,9 +249,9 @@ async function clearOldCache() {
   const storage = await chrome.storage.local.get(null);
   const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
   const now = Date.now();
-  
+
   const keysToRemove = [];
-  
+
   for (const [key, value] of Object.entries(storage)) {
     if (key.startsWith('analysis_') && value.timestamp) {
       if (now - value.timestamp > maxAge) {
@@ -228,7 +259,7 @@ async function clearOldCache() {
       }
     }
   }
-  
+
   if (keysToRemove.length > 0) {
     await chrome.storage.local.remove(keysToRemove);
     console.log(`Cleared ${keysToRemove.length} old cache entries`);
@@ -240,31 +271,31 @@ async function clearOldCache() {
  */
 async function runBackgroundAnalysis() {
   console.log('Starting background analysis...');
-  
+
   const authenticated = await isAuthenticated();
   if (!authenticated) {
     console.log('Not authenticated, skipping background analysis');
     return;
   }
-  
+
   try {
     const sites = await getSites();
-    
-    // Analyze up to 5 sites to avoid rate limits
-    for (const site of sites.slice(0, 5)) {
+
+    // Analyze all sites
+    for (const site of sites) {
       console.log('Analyzing site:', site.siteUrl);
-      
+
       await handleAnalyzeSite(site.siteUrl, { forceRefresh: true });
-      
+
       // Small delay between sites to avoid rate limits
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
-    
+
     // Check for critical decay and notify
     await checkAndNotify(sites);
-    
+
     console.log('Background analysis complete');
-    
+
   } catch (error) {
     console.error('Background analysis failed:', error);
   }
@@ -275,19 +306,19 @@ async function runBackgroundAnalysis() {
  */
 async function checkAndNotify(sites) {
   let totalCritical = 0;
-  
+
   for (const site of sites) {
     const cached = await getCachedAnalysis(site.siteUrl);
     if (cached.success && cached.summary) {
       totalCritical += cached.summary.criticalCount;
     }
   }
-  
+
   if (totalCritical > 0) {
     // Update badge to show critical count
     chrome.action.setBadgeText({ text: totalCritical.toString() });
     chrome.action.setBadgeBackgroundColor({ color: '#e53935' });
-    
+
     // Optional: Show notification (requires 'notifications' permission)
     // Uncomment and add "notifications" to manifest permissions to enable
     /*

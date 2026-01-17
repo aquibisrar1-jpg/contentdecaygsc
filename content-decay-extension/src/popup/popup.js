@@ -42,11 +42,11 @@ document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
   showScreen('loading');
-  
+
   try {
     // Check authentication status
     const token = await getAccessToken();
-    
+
     if (token) {
       const userInfo = await getUserInfo(token);
       await chrome.storage.local.set({ userInfo });
@@ -60,7 +60,7 @@ async function init() {
     console.error('Init error:', error);
     showScreen('login');
   }
-  
+
   setupEventListeners();
 }
 
@@ -70,7 +70,18 @@ function setupEventListeners() {
   elements.backBtn.addEventListener('click', () => showScreen('siteSelection'));
   elements.refreshBtn.addEventListener('click', () => analyzeSite(currentSiteUrl, true));
   elements.exportBtn.addEventListener('click', handleExport);
-  
+
+  // Date Range Change
+  const dateSelect = document.getElementById('date-range-select');
+  if (dateSelect) {
+    dateSelect.addEventListener('change', (e) => {
+      const newDays = parseInt(e.target.value, 10);
+      if (currentSiteUrl) {
+        analyzeSite(currentSiteUrl, true); // Re-analyze with new date range
+      }
+    });
+  }
+
   // Modal close handlers
   document.querySelector('.close-modal').addEventListener('click', closeModal);
   document.querySelector('.modal-backdrop').addEventListener('click', closeModal);
@@ -84,7 +95,7 @@ function showScreen(screenName) {
 function showToast(message, duration = 3000) {
   elements.errorMessage.textContent = message;
   elements.errorToast.classList.remove('hidden');
-  
+
   setTimeout(() => {
     elements.errorToast.classList.add('hidden');
   }, duration);
@@ -97,7 +108,7 @@ async function handleSignIn() {
     <div class="spinner" style="width: 20px; height: 20px; border-width: 2px;"></div>
     Signing in...
   `;
-  
+
   try {
     await signIn();
     const token = await getAccessToken();
@@ -138,14 +149,14 @@ function showUserInfo(userInfo) {
 // Sites
 async function loadSites() {
   elements.sitesList.innerHTML = '<div class="loading-text">Loading your sites...</div>';
-  
+
   try {
     const response = await chrome.runtime.sendMessage({ action: 'GET_SITES' });
-    
+
     if (!response.success) {
       throw new Error(response.error);
     }
-    
+
     renderSites(response.sites);
   } catch (error) {
     elements.sitesList.innerHTML = `
@@ -166,14 +177,14 @@ function renderSites(sites) {
     `;
     return;
   }
-  
+
   elements.sitesList.innerHTML = sites.map(site => `
     <div class="site-item" data-url="${encodeURIComponent(site.siteUrl)}">
       <span class="url">${formatSiteUrl(site.siteUrl)}</span>
       <span class="arrow">→</span>
     </div>
   `).join('');
-  
+
   elements.sitesList.querySelectorAll('.site-item').forEach(item => {
     item.addEventListener('click', () => {
       const siteUrl = decodeURIComponent(item.dataset.url);
@@ -191,30 +202,30 @@ async function analyzeSite(siteUrl, forceRefresh = false) {
   currentSiteUrl = siteUrl;
   elements.currentSite.textContent = formatSiteUrl(siteUrl);
   showScreen('analysis');
-  
+
   // Reset UI
   elements.decayingPages.innerHTML = '<div class="loading-text">Analyzing your content...</div>';
   elements.healthScore.textContent = '--';
   elements.healthCircle.style.strokeDasharray = '0, 100';
   elements.cacheInfo.textContent = '';
   elements.pagesCount.textContent = '0';
-  
+
   try {
     let response;
-    
+
     // Check cache first
     if (!forceRefresh) {
       const cached = await chrome.runtime.sendMessage({
         action: 'GET_CACHED_ANALYSIS',
         siteUrl
       });
-      
+
       if (cached.success && cached.cached) {
         response = cached;
         elements.cacheInfo.textContent = `Cached ${cached.cacheAge} minutes ago`;
       }
     }
-    
+
     // Run fresh analysis if needed
     if (!response) {
       elements.cacheInfo.textContent = 'Running fresh analysis...';
@@ -224,18 +235,18 @@ async function analyzeSite(siteUrl, forceRefresh = false) {
         options: { forceRefresh }
       });
     }
-    
+
     if (!response.success) {
       throw new Error(response.error);
     }
-    
+
     currentAnalysis = { summary: response.summary, pages: response.pages };
     renderAnalysis(response.summary, response.pages);
-    
+
     if (!response.cached) {
       elements.cacheInfo.textContent = 'Analysis complete';
     }
-    
+
   } catch (error) {
     elements.decayingPages.innerHTML = `
       <div class="error">Analysis failed: ${error.message}</div>
@@ -250,15 +261,15 @@ function renderAnalysis(summary, pages) {
   elements.warningCount.textContent = summary.warningCount;
   elements.monitoringCount.textContent = summary.monitoringCount;
   elements.healthyCount.textContent = summary.healthyCount;
-  
+
   // Update health score with animation
   const score = summary.healthScore;
   elements.healthScore.textContent = score + '%';
-  
+
   // Animate the circle
   setTimeout(() => {
     elements.healthCircle.style.strokeDasharray = `${score}, 100`;
-    
+
     // Change color based on score
     if (score >= 70) {
       elements.healthCircle.style.stroke = '#43a047';
@@ -268,14 +279,14 @@ function renderAnalysis(summary, pages) {
       elements.healthCircle.style.stroke = '#e53935';
     }
   }, 100);
-  
+
   // Render decaying pages
-  const decayingPages = pages.filter(p => 
+  const decayingPages = pages.filter(p =>
     p.decay.severity === 'critical' || p.decay.severity === 'warning'
   );
-  
+
   elements.pagesCount.textContent = decayingPages.length;
-  
+
   if (decayingPages.length === 0) {
     elements.decayingPages.innerHTML = `
       <div class="empty-state">
@@ -285,7 +296,7 @@ function renderAnalysis(summary, pages) {
     `;
     return;
   }
-  
+
   elements.decayingPages.innerHTML = decayingPages.slice(0, 20).map(page => `
     <div class="page-item" data-page="${encodeURIComponent(page.page)}">
       <div class="page-info">
@@ -295,7 +306,7 @@ function renderAnalysis(summary, pages) {
       <span class="decay-badge ${page.decay.severity}">${page.decay.severity}</span>
     </div>
   `).join('');
-  
+
   // Add click handlers
   elements.decayingPages.querySelectorAll('.page-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -319,17 +330,17 @@ function formatPagePath(url) {
 function showPageDetail(pageUrl) {
   const page = currentAnalysis.pages.find(p => p.page === pageUrl);
   if (!page) return;
-  
+
   const modal = elements.modal;
-  
+
   // Set page URL
   modal.querySelector('#modal-page-url').textContent = pageUrl;
-  
+
   // Set severity badge
   const severityBadge = modal.querySelector('#modal-severity');
   severityBadge.textContent = page.decay.severity;
   severityBadge.className = `severity-badge ${page.decay.severity}`;
-  
+
   // Render metrics
   const metricsHtml = `
     <div class="metric-card">
@@ -366,7 +377,7 @@ function showPageDetail(pageUrl) {
     </div>
   `;
   modal.querySelector('#modal-metrics').innerHTML = metricsHtml;
-  
+
   // Render recommendations
   const recommendationsHtml = `
     <h4>📋 Recommendations</h4>
@@ -375,14 +386,14 @@ function showPageDetail(pageUrl) {
     </ul>
   `;
   modal.querySelector('#modal-recommendations').innerHTML = recommendationsHtml;
-  
+
   // Set action links
   modal.querySelector('#modal-open-url').href = pageUrl;
-  
+
   // Create GSC URL
   const gscUrl = `https://search.google.com/search-console/performance/search-analytics?resource_id=${encodeURIComponent(currentSiteUrl)}&page=!${encodeURIComponent(pageUrl)}`;
   modal.querySelector('#modal-open-gsc').href = gscUrl;
-  
+
   // Show modal
   modal.classList.remove('hidden');
 }
@@ -394,17 +405,17 @@ function closeModal() {
 // Export
 async function handleExport() {
   if (!currentSiteUrl) return;
-  
+
   try {
     const response = await chrome.runtime.sendMessage({
       action: 'EXPORT_CSV',
       siteUrl: currentSiteUrl
     });
-    
+
     if (!response.success) {
       throw new Error(response.error);
     }
-    
+
     // Create download
     const blob = new Blob([response.csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -413,9 +424,9 @@ async function handleExport() {
     a.download = `content-decay-${formatSiteUrl(currentSiteUrl)}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    
+
     showToast('CSV exported successfully!');
-    
+
   } catch (error) {
     showToast('Export failed: ' + error.message);
   }
