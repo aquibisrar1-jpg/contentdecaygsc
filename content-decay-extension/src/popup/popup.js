@@ -464,57 +464,6 @@ function showPageDetail(pageUrl) {
   // Set page URL
   modal.querySelector('#modal-page-url').textContent = pageUrl;
 
-  // Set severity badge
-  const severityBadge = modal.querySelector('#modal-severity');
-  severityBadge.textContent = page.decay.severity;
-  severityBadge.className = `severity-badge ${page.decay.severity}`;
-
-  // Render metrics
-  const metricsHtml = `
-    <div class="metric-card">
-      <div class="label">Clicks Change</div>
-      <div class="value ${page.decay.changes.clicks < 0 ? 'negative' : 'positive'}">
-        ${page.decay.changes.clicks > 0 ? '+' : ''}${Math.round(page.decay.changes.clicks)}%
-      </div>
-    </div>
-    <div class="metric-card">
-      <div class="label">Impressions Change</div>
-      <div class="value ${page.decay.changes.impressions < 0 ? 'negative' : 'positive'}">
-        ${page.decay.changes.impressions > 0 ? '+' : ''}${Math.round(page.decay.changes.impressions)}%
-      </div>
-    </div>
-    <div class="metric-card">
-      <div class="label">CTR Change</div>
-      <div class="value ${page.decay.changes.ctr < 0 ? 'negative' : 'positive'}">
-        ${page.decay.changes.ctr > 0 ? '+' : ''}${Math.round(page.decay.changes.ctr)}%
-      </div>
-    </div>
-    <div class="metric-card">
-      <div class="label">Position Change</div>
-      <div class="value ${page.decay.changes.position < 0 ? 'negative' : 'positive'}">
-        ${page.decay.changes.position > 0 ? '+' : ''}${page.decay.changes.position.toFixed(1)}
-      </div>
-    </div>
-    <div class="metric-card">
-      <div class="label">Decay Score</div>
-      <div class="value neutral">${page.decay.score}</div>
-    </div>
-    <div class="metric-card">
-      <div class="label">Current Clicks</div>
-      <div class="value neutral">${page.current.clicks}</div>
-    </div>
-  `;
-  modal.querySelector('#modal-metrics').innerHTML = metricsHtml;
-
-  // Render recommendations
-  const recommendationsHtml = `
-    <h4>📋 Recommendations</h4>
-    <ul>
-      ${page.decay.recommendation.map(r => `<li>${r}</li>`).join('')}
-    </ul>
-  `;
-  modal.querySelector('#modal-recommendations').innerHTML = recommendationsHtml;
-
   // Set action links
   modal.querySelector('#modal-open-url').href = pageUrl;
 

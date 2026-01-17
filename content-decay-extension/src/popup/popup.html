@@ -157,29 +157,19 @@
       <div class="modal-backdrop"></div>
       <div class="modal-content">
         <button class="close-modal">×</button>
-        <h3 id="modal-page-url"></h3>
+        <h3 id="modal-page-url" style="word-break: break-all; line-height: 1.4;"></h3>
 
-        <div class="severity-badge" id="modal-severity"></div>
-
-        <div class="metrics-grid" id="modal-metrics">
-          <!-- Metrics will be populated here -->
-        </div>
-
-        <div class="recommendations" id="modal-recommendations">
-          <!-- Recommendations will be populated here -->
-        </div>
-
-        <div id="modal-queries" style="margin-top: 16px;">
-          <!-- Query table will be populated here -->
-        </div>
-
-        <div class="modal-actions">
+        <div class="modal-actions" style="margin: 12px 0;">
           <a id="modal-open-url" href="#" target="_blank" class="btn btn-primary">
             Open Page
           </a>
           <a id="modal-open-gsc" href="#" target="_blank" class="btn btn-secondary">
             View in GSC
           </a>
+        </div>
+
+        <div id="modal-queries" style="margin-top: 12px;">
+          <!-- Query table will be populated here -->
         </div>
       </div>
     </div>
