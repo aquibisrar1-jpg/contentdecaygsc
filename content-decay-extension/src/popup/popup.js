@@ -255,86 +255,18 @@ async function analyzeSite(siteUrl, forceRefresh = false) {
   }
 }
 
-// State for severity filtering
-let currentSeverityFilter = null;
-let allAnalysisPages = [];
-
 function renderAnalysis(summary, pages) {
-  // Store all pages for filtering
-  allAnalysisPages = pages;
-  currentSeverityFilter = null;
-
-  // Update summary cards
-  elements.criticalCount.textContent = summary.criticalCount;
-  elements.warningCount.textContent = summary.warningCount;
-  elements.monitoringCount.textContent = summary.monitoringCount;
-  elements.healthyCount.textContent = summary.healthyCount;
-
-  // Update health score with animation
-  const score = summary.healthScore;
-  elements.healthScore.textContent = score + '%';
-
-  // Animate the circle
-  setTimeout(() => {
-    elements.healthCircle.style.strokeDasharray = `${score}, 100`;
-
-    // Change color based on score
-    if (score >= 70) {
-      elements.healthCircle.style.stroke = '#22c55e';
-    } else if (score >= 40) {
-      elements.healthCircle.style.stroke = '#f59e0b';
-    } else {
-      elements.healthCircle.style.stroke = '#ef4444';
-    }
-  }, 100);
-
-  // Add click handlers to summary cards
-  document.querySelectorAll('.summary-cards .card').forEach(card => {
-    card.style.cursor = 'pointer';
-    card.addEventListener('click', () => {
-      const severity = card.classList[1]; // critical, warning, monitoring, healthy
-      filterBySeverity(severity);
-    });
-  });
-
-  // Show all pages by default (critical + warning for now)
-  filterBySeverity(null);
-}
-
-function filterBySeverity(severity) {
-  currentSeverityFilter = severity;
-
-  // Update active state on cards
-  document.querySelectorAll('.summary-cards .card').forEach(card => {
-    card.classList.remove('active');
-    if (severity && card.classList.contains(severity)) {
-      card.classList.add('active');
-    }
-  });
-
-  let filteredPages;
-  if (severity) {
-    filteredPages = allAnalysisPages.filter(p => p.decay.severity === severity);
-  } else {
-    // Default: show critical + warning
-    filteredPages = allAnalysisPages.filter(p =>
-      p.decay.severity === 'critical' || p.decay.severity === 'warning'
-    );
-  }
-
-  elements.pagesCount.textContent = filteredPages.length;
-
-  if (filteredPages.length === 0) {
+  // Just render all pages
+  if (pages.length === 0) {
     elements.decayingPages.innerHTML = `
       <div class="empty-state">
-        <p>No ${severity || 'decaying'} pages found.</p>
-        ${severity ? '<button class="btn btn-text" onclick="filterBySeverity(null)">Show All</button>' : ''}
+        <p>No pages found.</p>
       </div>
     `;
     return;
   }
 
-  renderPageList(filteredPages);
+  renderPageList(pages);
 }
 
 // State for page list sorting
