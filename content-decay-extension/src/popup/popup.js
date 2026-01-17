@@ -297,23 +297,133 @@ function renderAnalysis(summary, pages) {
     return;
   }
 
-  elements.decayingPages.innerHTML = decayingPages.slice(0, 20).map(page => `
-    <div class="page-item" data-page="${encodeURIComponent(page.page)}">
-      <div class="page-info">
-        <div class="page-url">${formatPagePath(page.page)}</div>
-        <div class="change">↓ ${Math.abs(Math.round(page.decay.changes.clicks))}% clicks</div>
-      </div>
-      <span class="decay-badge ${page.decay.severity}">${page.decay.severity}</span>
-    </div>
-  `).join('');
+  renderPageList(decayingPages);
+}
 
-  // Add click handlers
-  elements.decayingPages.querySelectorAll('.page-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const pageUrl = decodeURIComponent(item.dataset.page);
+// State for page list sorting
+let currentPageMetric = 'clicks';
+let currentPageSort = { col: 'diff', dir: 'desc' };
+
+function renderPageList(pages) {
+  const metric = currentPageMetric;
+  const sorted = [...pages].sort((a, b) => {
+    let valA, valB;
+    const metricKey = metric === 'rank' ? 'position' : metric;
+
+    if (currentPageSort.col === 'current') {
+      valA = a.current[metricKey] || 0;
+      valB = b.current[metricKey] || 0;
+    } else if (currentPageSort.col === 'previous') {
+      valA = a.previous[metricKey] || 0;
+      valB = b.previous[metricKey] || 0;
+    } else { // diff
+      valA = a.decay.changes[metricKey] || 0;
+      valB = b.decay.changes[metricKey] || 0;
+    }
+
+    return currentPageSort.dir === 'asc' ? valA - valB : valB - valA;
+  });
+
+  const getArrow = (col) => {
+    if (currentPageSort.col !== col) return '';
+    return currentPageSort.dir === 'asc' ? ' ↑' : ' ↓';
+  };
+
+  const metricLabel = metric === 'rank' ? 'Position' : metric.charAt(0).toUpperCase() + metric.slice(1);
+
+  elements.decayingPages.innerHTML = `
+    <div class="section-header">
+      <div class="header-title">
+        <h3>Decaying Pages</h3>
+        <span class="count-badge">${pages.length}</span>
+      </div>
+      <select id="page-metric-select" class="sort-select">
+        <option value="clicks" ${metric === 'clicks' ? 'selected' : ''}>Clicks</option>
+        <option value="impressions" ${metric === 'impressions' ? 'selected' : ''}>Impressions</option>
+        <option value="rank" ${metric === 'rank' ? 'selected' : ''}>Position</option>
+      </select>
+    </div>
+    <div class="pages-list" style="max-height: 300px; overflow-y: auto;">
+      <table class="queries-table comparison-table" style="width: 100%;">
+        <thead>
+          <tr>
+            <th style="text-align: left;">Page</th>
+            <th class="sortable" data-sort="current" style="text-align: right; cursor: pointer;">
+              Current${getArrow('current')}
+            </th>
+            <th class="sortable" data-sort="previous" style="text-align: right; cursor: pointer;">
+              Previous${getArrow('previous')}
+            </th>
+            <th class="sortable" data-sort="diff" style="text-align: right; cursor: pointer;">
+              Change${getArrow('diff')}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sorted.slice(0, 30).map(page => {
+    const metricKey = metric === 'rank' ? 'position' : metric;
+    const curr = page.current[metricKey] || 0;
+    const prev = page.previous[metricKey] || 0;
+    const diff = page.decay.changes[metricKey] || 0;
+
+    let diffClass = 'neutral';
+    if (diff !== 0) {
+      if (metric === 'rank') {
+        diffClass = diff < 0 ? 'pos' : 'neg'; // Lower position = better
+      } else {
+        diffClass = diff > 0 ? 'pos' : 'neg';
+      }
+    }
+
+    return `
+              <tr class="page-row" data-page="${encodeURIComponent(page.page)}" style="cursor: pointer;">
+                <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${page.page}">
+                  ${formatPagePath(page.page)}
+                </td>
+                <td style="text-align: right;">${metric === 'rank' ? curr.toFixed(1) : fNum(curr)}</td>
+                <td style="text-align: right;">${metric === 'rank' ? prev.toFixed(1) : fNum(prev)}</td>
+                <td style="text-align: right;">
+                  <span class="diff ${diffClass}">${diff > 0 ? '+' : ''}${Math.round(diff)}%</span>
+                </td>
+              </tr>
+            `;
+  }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // Metric dropdown handler
+  document.getElementById('page-metric-select').addEventListener('change', (e) => {
+    currentPageMetric = e.target.value;
+    renderPageList(pages);
+  });
+
+  // Sort header handlers
+  elements.decayingPages.querySelectorAll('.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      if (currentPageSort.col === col) {
+        currentPageSort.dir = currentPageSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentPageSort.col = col;
+        currentPageSort.dir = 'desc';
+      }
+      renderPageList(pages);
+    });
+  });
+
+  // Row click handlers
+  elements.decayingPages.querySelectorAll('.page-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const pageUrl = decodeURIComponent(row.dataset.page);
       showPageDetail(pageUrl);
     });
   });
+}
+
+function fNum(num) {
+  return num >= 1000 ? (num / 1000).toFixed(1) + 'k' : num;
 }
 
 function formatPagePath(url) {
