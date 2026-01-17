@@ -205,10 +205,7 @@ async function analyzeSite(siteUrl, forceRefresh = false) {
 
   // Reset UI
   elements.decayingPages.innerHTML = '<div class="loading-text">Analyzing your content...</div>';
-  elements.healthScore.textContent = '--';
-  elements.healthCircle.style.strokeDasharray = '0, 100';
-  elements.cacheInfo.textContent = '';
-  elements.pagesCount.textContent = '0';
+  if (elements.cacheInfo) elements.cacheInfo.textContent = '';
 
   try {
     let response;
@@ -222,13 +219,13 @@ async function analyzeSite(siteUrl, forceRefresh = false) {
 
       if (cached.success && cached.cached) {
         response = cached;
-        elements.cacheInfo.textContent = `Cached ${cached.cacheAge} minutes ago`;
+        if (elements.cacheInfo) elements.cacheInfo.textContent = `Cached ${cached.cacheAge} minutes ago`;
       }
     }
 
     // Run fresh analysis if needed
     if (!response) {
-      elements.cacheInfo.textContent = 'Running fresh analysis...';
+      if (elements.cacheInfo) elements.cacheInfo.textContent = 'Running fresh analysis...';
       response = await chrome.runtime.sendMessage({
         action: 'ANALYZE_SITE',
         siteUrl,
@@ -243,7 +240,7 @@ async function analyzeSite(siteUrl, forceRefresh = false) {
     currentAnalysis = { summary: response.summary, pages: response.pages };
     renderAnalysis(response.summary, response.pages);
 
-    if (!response.cached) {
+    if (!response.cached && elements.cacheInfo) {
       elements.cacheInfo.textContent = 'Analysis complete';
     }
 
@@ -251,7 +248,7 @@ async function analyzeSite(siteUrl, forceRefresh = false) {
     elements.decayingPages.innerHTML = `
       <div class="error">Analysis failed: ${error.message}</div>
     `;
-    elements.cacheInfo.textContent = '';
+    if (elements.cacheInfo) elements.cacheInfo.textContent = '';
   }
 }
 
