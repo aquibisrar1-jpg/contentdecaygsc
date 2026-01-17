@@ -331,6 +331,15 @@ function renderPageList(pages) {
 
   const metricLabel = metric === 'rank' ? 'Position' : metric.charAt(0).toUpperCase() + metric.slice(1);
 
+  // Get date range info from the first page (if available)
+  const dateSelect = document.getElementById('date-range-select');
+  const days = dateSelect ? parseInt(dateSelect.value, 10) : 30;
+  const now = new Date();
+  const currentEnd = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const currentStart = new Date(now - days * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const prevEnd = new Date(now - days * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const prevStart = new Date(now - days * 2 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
   elements.decayingPages.innerHTML = `
     <div class="section-header">
       <div class="header-title">
@@ -349,13 +358,13 @@ function renderPageList(pages) {
           <tr>
             <th style="text-align: left;">Page</th>
             <th class="sortable" data-sort="current" style="text-align: right; cursor: pointer;">
-              Current${getArrow('current')}
+              ${currentStart} - ${currentEnd}${getArrow('current')}
             </th>
             <th class="sortable" data-sort="previous" style="text-align: right; cursor: pointer;">
-              Previous${getArrow('previous')}
+              ${prevStart} - ${prevEnd}${getArrow('previous')}
             </th>
             <th class="sortable" data-sort="diff" style="text-align: right; cursor: pointer;">
-              Change${getArrow('diff')}
+              Diff${getArrow('diff')}
             </th>
           </tr>
         </thead>
@@ -364,7 +373,7 @@ function renderPageList(pages) {
     const metricKey = metric === 'rank' ? 'position' : metric;
     const curr = page.current[metricKey] || 0;
     const prev = page.previous[metricKey] || 0;
-    const diff = page.decay.changes[metricKey] || 0;
+    const diff = curr - prev; // Absolute difference
 
     let diffClass = 'neutral';
     if (diff !== 0) {
@@ -375,15 +384,24 @@ function renderPageList(pages) {
       }
     }
 
+    // Get readable page path
+    let pagePath;
+    try {
+      const urlObj = new URL(page.page);
+      pagePath = urlObj.pathname;
+    } catch {
+      pagePath = page.page;
+    }
+
     return `
               <tr class="page-row" data-page="${encodeURIComponent(page.page)}" style="cursor: pointer;">
-                <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${page.page}">
-                  ${formatPagePath(page.page)}
+                <td style="word-break: break-all; line-height: 1.3;" title="${page.page}">
+                  ${pagePath}
                 </td>
                 <td style="text-align: right;">${metric === 'rank' ? curr.toFixed(1) : fNum(curr)}</td>
                 <td style="text-align: right;">${metric === 'rank' ? prev.toFixed(1) : fNum(prev)}</td>
                 <td style="text-align: right;">
-                  <span class="diff ${diffClass}">${diff > 0 ? '+' : ''}${Math.round(diff)}%</span>
+                  <span class="diff ${diffClass}">${diff > 0 ? '+' : ''}${metric === 'rank' ? diff.toFixed(1) : fNum(diff)}</span>
                 </td>
               </tr>
             `;
