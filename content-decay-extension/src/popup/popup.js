@@ -522,8 +522,135 @@ function showPageDetail(pageUrl) {
   const gscUrl = `https://search.google.com/search-console/performance/search-analytics?resource_id=${encodeURIComponent(currentSiteUrl)}&page=!${encodeURIComponent(pageUrl)}`;
   modal.querySelector('#modal-open-gsc').href = gscUrl;
 
+  // Render Query Section if queries exist
+  const queriesContainer = modal.querySelector('#modal-queries');
+  if (queriesContainer && page.queries && page.queries.length > 0) {
+    renderQueryTable(queriesContainer, page.queries);
+  } else if (queriesContainer) {
+    queriesContainer.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">No query data available</p>';
+  }
+
   // Show modal
   modal.classList.remove('hidden');
+}
+
+// State for query table sorting
+let currentQueryMetric = 'clicks';
+let currentQuerySort = { col: 'diff', dir: 'desc' };
+
+function renderQueryTable(container, queries) {
+  const metric = currentQueryMetric;
+  const metricKey = metric === 'rank' ? 'position' : metric;
+
+  const sorted = [...queries].sort((a, b) => {
+    let valA, valB;
+
+    if (currentQuerySort.col === 'current') {
+      valA = a.current?.[metricKey] || 0;
+      valB = b.current?.[metricKey] || 0;
+    } else if (currentQuerySort.col === 'previous') {
+      valA = a.previous?.[metricKey] || 0;
+      valB = b.previous?.[metricKey] || 0;
+    } else { // diff
+      valA = (a.current?.[metricKey] || 0) - (a.previous?.[metricKey] || 0);
+      valB = (b.current?.[metricKey] || 0) - (b.previous?.[metricKey] || 0);
+    }
+
+    return currentQuerySort.dir === 'asc' ? valA - valB : valB - valA;
+  });
+
+  const getArrow = (col) => {
+    if (currentQuerySort.col !== col) return '';
+    return currentQuerySort.dir === 'asc' ? ' ↑' : ' ↓';
+  };
+
+  // Get date range info
+  const dateSelect = document.getElementById('date-range-select');
+  const days = dateSelect ? parseInt(dateSelect.value, 10) : 30;
+  const now = new Date();
+  const currentEnd = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const currentStart = new Date(now - days * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const prevEnd = new Date(now - days * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const prevStart = new Date(now - days * 2 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  container.innerHTML = `
+    <div class="section-header">
+      <div class="header-title">
+        <h4>Top Queries</h4>
+        <span class="count-badge">${queries.length}</span>
+      </div>
+      <select id="query-metric-select" class="sort-select">
+        <option value="clicks" ${metric === 'clicks' ? 'selected' : ''}>Clicks</option>
+        <option value="impressions" ${metric === 'impressions' ? 'selected' : ''}>Impressions</option>
+        <option value="rank" ${metric === 'rank' ? 'selected' : ''}>Position</option>
+      </select>
+    </div>
+    <div class="queries-list" style="max-height: 250px; overflow-y: auto;">
+      <table class="queries-table comparison-table" style="width: 100%;">
+        <thead>
+          <tr>
+            <th style="text-align: left;">Query</th>
+            <th class="sortable" data-sort="current" style="text-align: right; cursor: pointer;">
+              ${currentStart} - ${currentEnd}${getArrow('current')}
+            </th>
+            <th class="sortable" data-sort="previous" style="text-align: right; cursor: pointer;">
+              ${prevStart} - ${prevEnd}${getArrow('previous')}
+            </th>
+            <th class="sortable" data-sort="diff" style="text-align: right; cursor: pointer;">
+              Diff${getArrow('diff')}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sorted.slice(0, 20).map(q => {
+    const curr = q.current?.[metricKey] || 0;
+    const prev = q.previous?.[metricKey] || 0;
+    const diff = curr - prev;
+
+    let diffClass = 'neutral';
+    if (diff !== 0) {
+      if (metric === 'rank') {
+        diffClass = diff < 0 ? 'pos' : 'neg';
+      } else {
+        diffClass = diff > 0 ? 'pos' : 'neg';
+      }
+    }
+
+    return `
+              <tr>
+                <td style="word-break: break-all; line-height: 1.3;">${q.query}</td>
+                <td style="text-align: right;">${metric === 'rank' ? curr.toFixed(1) : fNum(curr)}</td>
+                <td style="text-align: right;">${metric === 'rank' ? prev.toFixed(1) : fNum(prev)}</td>
+                <td style="text-align: right;">
+                  <span class="diff ${diffClass}">${diff > 0 ? '+' : ''}${metric === 'rank' ? diff.toFixed(1) : fNum(diff)}</span>
+                </td>
+              </tr>
+            `;
+  }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // Metric dropdown handler
+  container.querySelector('#query-metric-select').addEventListener('change', (e) => {
+    currentQueryMetric = e.target.value;
+    renderQueryTable(container, queries);
+  });
+
+  // Sort header handlers
+  container.querySelectorAll('.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      if (currentQuerySort.col === col) {
+        currentQuerySort.dir = currentQuerySort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentQuerySort.col = col;
+        currentQuerySort.dir = 'desc';
+      }
+      renderQueryTable(container, queries);
+    });
+  });
 }
 
 function closeModal() {
