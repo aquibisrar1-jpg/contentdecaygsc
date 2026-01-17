@@ -524,10 +524,27 @@ function showPageDetail(pageUrl) {
 
   // Render Query Section if queries exist
   const queriesContainer = modal.querySelector('#modal-queries');
-  if (queriesContainer && page.queries && page.queries.length > 0) {
-    renderQueryTable(queriesContainer, page.queries);
-  } else if (queriesContainer) {
-    queriesContainer.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">No query data available</p>';
+  if (queriesContainer) {
+    queriesContainer.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">Loading queries...</p>';
+
+    // Fetch queries from background worker
+    const dateSelect = document.getElementById('date-range-select');
+    const days = dateSelect ? parseInt(dateSelect.value, 10) : 30;
+
+    chrome.runtime.sendMessage({
+      action: 'GET_PAGE_QUERIES',
+      siteUrl: currentSiteUrl,
+      pageUrl: pageUrl,
+      days: days
+    }).then(response => {
+      if (response.success && response.queries && response.queries.length > 0) {
+        renderQueryTable(queriesContainer, response.queries);
+      } else {
+        queriesContainer.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">No query data available</p>';
+      }
+    }).catch(err => {
+      queriesContainer.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">Failed to load queries</p>';
+    });
   }
 
   // Show modal
