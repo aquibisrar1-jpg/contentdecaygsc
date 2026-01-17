@@ -591,7 +591,8 @@ h3 {
 }
 
 /* Pages List */
-.pages-list {
+.pages-list,
+.queries-list {
   max-height: 280px;
   overflow-y: auto;
   background: var(--bg-card);
