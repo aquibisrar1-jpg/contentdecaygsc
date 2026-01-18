@@ -309,14 +309,17 @@ function renderPageList(pages) {
   elements.decayingPages.innerHTML = `
     <div class="section-header">
       <div class="header-title">
-        <h3>Decaying Pages</h3>
+        <h3>Pages</h3>
         <span class="count-badge">${pages.length}</span>
       </div>
-      <select id="page-metric-select" class="sort-select">
-        <option value="clicks" ${metric === 'clicks' ? 'selected' : ''}>Clicks</option>
-        <option value="impressions" ${metric === 'impressions' ? 'selected' : ''}>Impressions</option>
-        <option value="rank" ${metric === 'rank' ? 'selected' : ''}>Position</option>
-      </select>
+      <div class="header-controls">
+        <input type="text" id="page-filter-input" class="filter-input" placeholder="Filter pages..." />
+        <select id="page-metric-select" class="sort-select">
+          <option value="clicks" ${metric === 'clicks' ? 'selected' : ''}>Clicks</option>
+          <option value="impressions" ${metric === 'impressions' ? 'selected' : ''}>Impressions</option>
+          <option value="rank" ${metric === 'rank' ? 'selected' : ''}>Position</option>
+        </select>
+      </div>
     </div>
     <div class="pages-list" style="max-height: 300px; overflow-y: auto;">
       <table class="queries-table comparison-table" style="width: 100%;">
@@ -383,6 +386,18 @@ function renderPageList(pages) {
     renderPageList(pages);
   });
 
+  // Filter input handler
+  const filterInput = document.getElementById('page-filter-input');
+  filterInput.addEventListener('input', (e) => {
+    const query = e.target.value.toLowerCase().trim();
+    if (query === '') {
+      renderPageList(pages);
+    } else {
+      const filtered = pages.filter(p => p.page.toLowerCase().includes(query));
+      renderFilteredTable(filtered, pages.length);
+    }
+  });
+
   // Sort header handlers
   elements.decayingPages.querySelectorAll('.sortable').forEach(th => {
     th.addEventListener('click', () => {
@@ -398,6 +413,66 @@ function renderPageList(pages) {
   });
 
   // Row click handlers
+  elements.decayingPages.querySelectorAll('.page-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const pageUrl = decodeURIComponent(row.dataset.page);
+      showPageDetail(pageUrl);
+    });
+  });
+}
+
+// Helper to render filtered results without re-rendering header
+function renderFilteredTable(filtered, totalCount) {
+  const metric = currentPageMetric;
+  const metricKey = metric === 'rank' ? 'position' : metric;
+
+  const tbody = elements.decayingPages.querySelector('tbody');
+  if (!tbody) return;
+
+  // Update count badge
+  const badge = elements.decayingPages.querySelector('.count-badge');
+  if (badge) badge.textContent = `${filtered.length}/${totalCount}`;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">No pages match your filter</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.slice(0, 30).map(page => {
+    const curr = page.current[metricKey] || 0;
+    const prev = page.previous[metricKey] || 0;
+    const diff = curr - prev;
+
+    let diffClass = 'neutral';
+    if (diff !== 0) {
+      if (metric === 'rank') {
+        diffClass = diff < 0 ? 'pos' : 'neg';
+      } else {
+        diffClass = diff > 0 ? 'pos' : 'neg';
+      }
+    }
+
+    let pagePath;
+    try {
+      const urlObj = new URL(page.page);
+      pagePath = urlObj.pathname;
+    } catch {
+      pagePath = page.page;
+    }
+
+    return `
+      <tr class="page-row" data-page="${encodeURIComponent(page.page)}" style="cursor: pointer;">
+        <td style="word-break: break-all; line-height: 1.3;" title="${page.page}">${pagePath}</td>
+        <td style="text-align: right;">${metric === 'rank' ? curr.toFixed(1) : fNum(curr)}</td>
+        <td style="text-align: right;">${metric === 'rank' ? prev.toFixed(1) : fNum(prev)}</td>
+        <td style="text-align: right;">
+          <span class="diff ${diffClass}">${diff > 0 ? '+' : ''}${metric === 'rank' ? diff.toFixed(1) : fNum(diff)}</span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Re-attach row click handlers
   elements.decayingPages.querySelectorAll('.page-row').forEach(row => {
     row.addEventListener('click', () => {
       const pageUrl = decodeURIComponent(row.dataset.page);

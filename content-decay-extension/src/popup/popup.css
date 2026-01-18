@@ -364,6 +364,36 @@ h3 {
   color: var(--text-primary);
 }
 
+/* Filter Input */
+.filter-input {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-m);
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  width: 140px;
+  transition: all 0.2s;
+}
+
+.filter-input::placeholder {
+  color: var(--text-muted);
+}
+
+.filter-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  width: 180px;
+}
+
+/* Header Controls */
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* Sites List */
 .sites-list {
   display: flex;
